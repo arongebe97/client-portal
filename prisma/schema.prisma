@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+}
+model Client {
+  id                    String   @id @default(uuid())
+  email                 String   @unique
+  password_hash         String
+  role                  String   @default("CLIENT") // "ADMIN" or "CLIENT"
+  
+  // Legacy field support (optional)
+  instantly_campaign_id String?  
+  
+  created_at            DateTime @default(now())
+  // Relations
+  stats        Campaign_Stats[]
+  activityLogs Activity_Log[]
+  campaigns    CampaignAccess[]
+}
+model CampaignAccess {
+  id                    String @id @default(uuid())
+  client_id             String
+  instantly_campaign_id String 
+  campaign_name         String? 
+  client Client @relation(fields: [client_id], references: [id])
+  
+  @@unique([client_id, instantly_campaign_id])
+}
+model Campaign_Stats {
+  id               String   @id @default(uuid())
+  client_id        String
+  date             DateTime @default(now())
+  emails_sent      Int      @default(0)
+  opens            Int      @default(0)
+  replies          Int      @default(0)
+  positive_replies Int      @default(0)
+  bounces          Int      @default(0)
+  client Client @relation(fields: [client_id], references: [id])
+}
+model Activity_Log {
+  id           String   @id @default(uuid())
+  client_id    String
+  event_type   String   // e.g., 'reply_received', 'email_opened'
+  lead_email   String
+  message_body String?
+  timestamp    DateTime @default(now())
+  client Client @relation(fields: [client_id], references: [id])
+}
