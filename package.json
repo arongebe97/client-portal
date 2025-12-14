@@ -6,6 +6,7 @@
     "seed": "node seed_admin.js"
   },
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
