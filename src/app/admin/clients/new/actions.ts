@@ -33,8 +33,8 @@ export async function createClient(formData: FormData) {
 
         revalidatePath("/admin");
         return { success: true };
-    } catch (error) {
-        console.error(error);
-        return { error: "Failed to create client" };
+    } catch (error: any) {
+        console.error("Failed to create client:", error);
+        return { error: `Failed to create client: ${error.message || error}` };
     }
 }
