@@ -2,13 +2,21 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 
 export default async function AdminPage() {
-    const clients = await prisma.client.findMany({
-        where: { role: "CLIENT" },
-        orderBy: { created_at: "desc" },
-        include: {
-            campaigns: true
-        }
-    });
+    let clients = [];
+    let error = null;
+
+    try {
+        clients = await prisma.client.findMany({
+            where: { role: "CLIENT" },
+            orderBy: { created_at: "desc" },
+            include: {
+                campaigns: true
+            }
+        });
+    } catch (e: any) {
+        error = e.message;
+        console.error("Database error:", e);
+    }
 
     return (
         <div className="space-y-8">
@@ -24,6 +32,13 @@ export default async function AdminPage() {
                     Add Client
                 </Link>
             </div>
+
+            {error && (
+                <div className="rounded-xl border border-red-800 bg-red-900/20 p-6 text-red-400">
+                    <strong>Database Error:</strong> {error}
+                    <p className="mt-2 text-sm text-red-300">Please check that DATABASE_URL is set correctly in Vercel environment variables.</p>
+                </div>
+            )}
 
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50">
                 <div className="overflow-x-auto">
