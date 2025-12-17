@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { redirect } from "next/navigation";
 import { ReactNode } from "react";
+import SignOutButton from "@/components/SignOutButton";
 
 export default async function AdminLayout({
     children,
@@ -24,12 +25,14 @@ export default async function AdminLayout({
                     </div>
                     <div className="flex items-center gap-4">
                         <span className="text-sm text-zinc-400">{session.user.email}</span>
+                        <SignOutButton />
                     </div>
                 </div>
-            </header>
-            <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-                {children}
-            </main>
         </div>
+            </header >
+        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            {children}
+        </main>
+        </div >
     );
 }
