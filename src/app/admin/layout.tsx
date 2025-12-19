@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/authOptions";
 import { redirect } from "next/navigation";
 import { ReactNode } from "react";
 import SignOutButton from "@/components/SignOutButton";
+import Link from "next/link";
 
 export default async function AdminLayout({
     children,
@@ -23,7 +24,10 @@ export default async function AdminLayout({
                         <div className="h-8 w-8 rounded-lg bg-blue-600"></div>
                         <span className="font-bold">Admin Portal</span>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-6">
+                        <Link href="/" className="text-sm font-medium text-orange-400 hover:text-orange-300">
+                            View Stats
+                        </Link>
                         <span className="text-sm text-zinc-400">{session.user.email}</span>
                         <SignOutButton />
                     </div>

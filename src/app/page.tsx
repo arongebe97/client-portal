@@ -5,28 +5,29 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import SignOutButton from "@/components/SignOutButton";
 
-async function getData(userId: string) {
-  // Fetch only campaigns assigned to this user
-  const assignments = await prisma.campaignAccess.findMany({
-    where: { client_id: userId },
-    select: { instantly_campaign_id: true }
-  });
+async function getData(userId: string, isAdmin: boolean) {
+  let campaignIds: string[] = [];
 
-  const campaignIds = assignments.map(a => a.instantly_campaign_id);
-
-  if (campaignIds.length === 0) {
-    return { stats: { sent: 0, openRate: 0, replyRate: 0, totalCampaigns: 0 }, recentActivity: [] };
+  if (isAdmin) {
+    const allAssignments = await prisma.campaignAccess.findMany({
+      select: { instantly_campaign_id: true }
+    });
+    campaignIds = allAssignments.map(a => a.instantly_campaign_id);
+  } else {
+    const assignments = await prisma.campaignAccess.findMany({
+      where: { client_id: userId },
+      select: { instantly_campaign_id: true }
+    });
+    campaignIds = assignments.map(a => a.instantly_campaign_id);
   }
 
-  // Aggregate stats from Campaign_Stats based on assigned IDs
-  // Note: verify if Campaign_Stats table actually has instanty_campaign_id column or if we just link by client_id.
-  // The schema links Campaign_Stats to Client, but usually stats are per campaign.
-  // Given the Master Prompt schema: Campaign_Stats has client_id but NO campaign_id column.
-  // This implies stats are aggregated PER CLIENT.
+  if (campaignIds.length === 0) {
+    return { stats: { sent: 0, openRate: 0, replyRate: 0, totalCampaigns: 0 } };
+  }
 
-  const stats = await prisma.campaign_Stats.groupBy({
-    by: ['client_id'],
-    where: { client_id: userId },
+  const queryOptions: any = isAdmin ? {} : { where: { client_id: userId } };
+  const stats = await prisma.campaign_Stats.aggregate({
+    ...queryOptions,
     _sum: {
       emails_sent: true,
       opens: true,
@@ -34,8 +35,7 @@ async function getData(userId: string) {
     }
   });
 
-  const aggregate = stats[0]?._sum || { emails_sent: 0, opens: 0, replies: 0 };
-
+  const aggregate = stats._sum || { emails_sent: 0, opens: 0, replies: 0 };
   const openRate = aggregate.emails_sent ? (aggregate.opens! / aggregate.emails_sent) * 100 : 0;
   const replyRate = aggregate.emails_sent ? (aggregate.replies! / aggregate.emails_sent) * 100 : 0;
 
@@ -44,7 +44,7 @@ async function getData(userId: string) {
       sent: aggregate.emails_sent || 0,
       openRate: openRate,
       replyRate: replyRate,
-      totalCampaigns: campaignIds.length
+      totalCampaigns: new Set(campaignIds).size
     }
   };
 }
@@ -53,9 +53,9 @@ export default async function ClientDashboard() {
   const session = await getServerSession(authOptions);
 
   if (!session) redirect("/login");
-  if (session.user.role === "ADMIN") redirect("/admin");
+  const isAdmin = session.user.role === "ADMIN";
 
-  const { stats } = await getData(session.user.id);
+  const { stats } = await getData(session.user.id, isAdmin);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50">
@@ -65,7 +65,14 @@ export default async function ClientDashboard() {
             <div className="h-8 w-8 rounded-lg bg-orange-500"></div>
             <span className="font-bold">Client Portal</span>
           </div>
-          <SignOutButton />
+          <div className="flex items-center gap-6">
+            {session.user.role === "ADMIN" && (
+              <Link href="/admin" className="text-sm font-medium text-blue-400 hover:text-blue-300">
+                Admin Area
+              </Link>
+            )}
+            <SignOutButton />
+          </div>
         </div>
       </header>
 
