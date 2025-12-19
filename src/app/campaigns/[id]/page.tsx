@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import { getInstantlyCampaigns } from "@/lib/instantly";
 
 interface Props {
     params: Promise<{ id: string }>;
@@ -13,18 +14,31 @@ export default async function CampaignDetailPage({ params }: Props) {
     const session = await getServerSession(authOptions);
     if (!session) redirect("/login");
 
-    // ACCESS CONTROL: Verify user is assigned to this campaign
-    const assignment = await prisma.campaignAccess.findUnique({
-        where: {
-            client_id_instantly_campaign_id: {
-                client_id: session.user.id,
-                instantly_campaign_id: id,
-            },
-        },
-    });
+    const isAdmin = session.user.role === "ADMIN";
+    let campaignName = "";
 
-    if (!assignment) {
-        notFound(); // 404 if not assigned (Security by obscurity)
+    // ACCESS CONTROL
+    if (isAdmin) {
+        // Admins can see any campaign. Fetch name from Instantly.
+        const allCampaigns = await getInstantlyCampaigns();
+        const campaign = allCampaigns.find(c => c.id === id);
+        if (!campaign) notFound();
+        campaignName = campaign.name;
+    } else {
+        // CLIENTS: Verify user is assigned to this campaign
+        const assignment = await prisma.campaignAccess.findUnique({
+            where: {
+                client_id_instantly_campaign_id: {
+                    client_id: session.user.id,
+                    instantly_campaign_id: id,
+                },
+            },
+        });
+
+        if (!assignment) {
+            notFound();
+        }
+        campaignName = assignment.campaign_name || "Untitled Campaign";
     }
 
     // Fetch Stats for this specific campaign (aggregated for the client)
@@ -50,9 +64,9 @@ export default async function CampaignDetailPage({ params }: Props) {
                     </Link>
                     <div className="mt-2 flex items-center gap-3">
                         <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse"></div>
-                        <h1 className="text-3xl font-bold">{assignment.campaign_name}</h1>
+                        <h1 className="text-3xl font-bold">{campaignName}</h1>
                     </div>
-                    <p className="text-mono text-zinc-500 text-sm mt-1">{assignment.instantly_campaign_id}</p>
+                    <p className="text-mono text-zinc-500 text-sm mt-1">{id}</p>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

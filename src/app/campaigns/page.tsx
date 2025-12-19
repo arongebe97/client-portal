@@ -3,18 +3,29 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { getInstantlyCampaigns } from "@/lib/instantly";
 
 export default async function CampaignsListPage() {
     const session = await getServerSession(authOptions);
     if (!session) redirect("/login");
 
-    // Fetch assigned campaigns with their stats logic would normally go here
-    // For now, we list the assignments and fetch their *latest* stats from our database
+    const isAdmin = session.user.role === "ADMIN";
+    let campaigns = [];
 
-    const assignments = await prisma.campaignAccess.findMany({
-        where: { client_id: session.user.id },
-    });
+    if (isAdmin) {
+        // Admins see everything from Instantly
+        const instantlyCampaigns = await getInstantlyCampaigns();
+        campaigns = instantlyCampaigns.map(c => ({
+            id: c.id,
+            instantly_campaign_id: c.id,
+            campaign_name: c.name
+        }));
+    } else {
+        // Clients see only assigned campaigns
+        campaigns = await prisma.campaignAccess.findMany({
+            where: { client_id: session.user.id },
+        });
+    }
 
     return (
         <div className="min-h-screen bg-zinc-950 text-zinc-50 p-8">
@@ -23,11 +34,12 @@ export default async function CampaignsListPage() {
                     <Link href="/" className="text-sm text-zinc-400 hover:text-white transition-colors">
                         ← Back to Dashboard
                     </Link>
-                    <h1 className="mt-2 text-3xl font-bold">Your Campaigns</h1>
+                    <h1 className="mt-2 text-3xl font-bold">{isAdmin ? "All Campaigns" : "Your Campaigns"}</h1>
+                    {isAdmin && <p className="text-zinc-500 mt-2">Manage and view all campaigns directly from Instantly.ai</p>}
                 </div>
 
                 <div className="grid gap-4">
-                    {assignments.map((campaign) => (
+                    {campaigns.map((campaign) => (
                         <Link
                             key={campaign.id}
                             href={`/campaigns/${campaign.instantly_campaign_id}`}
@@ -45,9 +57,9 @@ export default async function CampaignsListPage() {
                         </Link>
                     ))}
 
-                    {assignments.length === 0 && (
+                    {campaigns.length === 0 && (
                         <div className="text-center py-12 text-zinc-500 bg-zinc-900/30 rounded-xl border border-dashed border-zinc-800">
-                            No campaigns assigned yet.
+                            No campaigns found.
                         </div>
                     )}
                 </div>
