@@ -5,10 +5,11 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 
 interface Props {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 }
 
 export default async function CampaignDetailPage({ params }: Props) {
+    const { id } = await params;
     const session = await getServerSession(authOptions);
     if (!session) redirect("/login");
 
@@ -17,7 +18,7 @@ export default async function CampaignDetailPage({ params }: Props) {
         where: {
             client_id_instantly_campaign_id: {
                 client_id: session.user.id,
-                instantly_campaign_id: params.id,
+                instantly_campaign_id: id,
             },
         },
     });

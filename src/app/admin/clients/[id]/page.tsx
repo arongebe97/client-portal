@@ -5,12 +5,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 interface Props {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 }
 
 export default async function ManageClientPage({ params }: Props) {
+    const { id } = await params;
     const client = await prisma.client.findUnique({
-        where: { id: params.id },
+        where: { id },
         include: { campaigns: true },
     });
 
@@ -50,8 +51,8 @@ export default async function ManageClientPage({ params }: Props) {
                                     <label
                                         key={campaign.id}
                                         className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-all ${isAssigned
-                                                ? "bg-blue-500/10 border-blue-500/50"
-                                                : "bg-zinc-800/30 border-zinc-800 hover:border-zinc-700"
+                                            ? "bg-blue-500/10 border-blue-500/50"
+                                            : "bg-zinc-800/30 border-zinc-800 hover:border-zinc-700"
                                             }`}
                                     >
                                         <input
