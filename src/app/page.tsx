@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import SignOutButton from "@/components/SignOutButton";
 
 async function getData(userId: string) {
   // Fetch only campaigns assigned to this user
@@ -64,9 +65,7 @@ export default async function ClientDashboard() {
             <div className="h-8 w-8 rounded-lg bg-orange-500"></div>
             <span className="font-bold">Client Portal</span>
           </div>
-          <button className="text-sm text-zinc-400 hover:text-white transition-colors">
-            Sign Out
-          </button>
+          <SignOutButton />
         </div>
       </header>
 
