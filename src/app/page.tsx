@@ -66,6 +66,9 @@ export default async function ClientDashboard() {
             <span className="font-bold">Client Portal</span>
           </div>
           <div className="flex items-center gap-6">
+            <Link href="/scraper" className="text-sm font-medium text-zinc-400 hover:text-white">
+              AI Scraper
+            </Link>
             {session.user.role === "ADMIN" && (
               <Link href="/admin" className="text-sm font-medium text-blue-400 hover:text-blue-300">
                 Admin Area
