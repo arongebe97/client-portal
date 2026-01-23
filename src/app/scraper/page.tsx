@@ -6,20 +6,29 @@ import { useSession } from 'next-auth/react';
 import { redirect } from 'next/navigation';
 import SignOutButton from '@/components/SignOutButton';
 
+type AIProvider = 'anthropic' | 'openai';
+
 interface ScrapeResponse {
   success: boolean;
   data?: string;
   error?: string;
   url?: string;
+  provider?: AIProvider;
 }
+
+const AI_MODELS = [
+  { id: 'anthropic' as const, name: 'Claude Sonnet', description: 'Anthropic' },
+  { id: 'openai' as const, name: 'GPT-4o mini', description: 'OpenAI' },
+];
 
 export default function ScraperPage() {
   const { data: session, status } = useSession();
   const [url, setUrl] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [provider, setProvider] = useState<AIProvider>('openai');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScrapeResponse | null>(null);
-  const [history, setHistory] = useState<Array<{ url: string; prompt: string; result: string }>>([]);
+  const [history, setHistory] = useState<Array<{ url: string; prompt: string; result: string; provider: AIProvider }>>([]);
 
   if (status === 'loading') {
     return (
@@ -44,7 +53,7 @@ export default function ScraperPage() {
       const response = await fetch('/api/scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, prompt }),
+        body: JSON.stringify({ url, prompt, provider }),
       });
 
       const data: ScrapeResponse = await response.json();
@@ -52,7 +61,7 @@ export default function ScraperPage() {
 
       if (data.success && data.data) {
         setHistory(prev => [
-          { url, prompt, result: data.data! },
+          { url, prompt, result: data.data!, provider },
           ...prev.slice(0, 9),
         ]);
       }
@@ -141,6 +150,30 @@ export default function ScraperPage() {
                 />
               </div>
 
+              {/* AI Model Selector */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-3">
+                  AI Model
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {AI_MODELS.map((model) => (
+                    <button
+                      key={model.id}
+                      type="button"
+                      onClick={() => setProvider(model.id)}
+                      className={`rounded-xl border p-4 text-left transition-all ${
+                        provider === model.id
+                          ? 'border-orange-500 bg-orange-500/10'
+                          : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
+                      }`}
+                    >
+                      <div className="font-medium text-white">{model.name}</div>
+                      <div className="text-sm text-zinc-400">{model.description}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Quick Prompts */}
               <div>
                 <p className="text-sm text-zinc-400 mb-3">Quick prompts:</p>
@@ -169,10 +202,10 @@ export default function ScraperPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    Analyzing page...
+                    Analyzing with {AI_MODELS.find(m => m.id === provider)?.name}...
                   </span>
                 ) : (
-                  'Extract Data'
+                  `Extract Data with ${AI_MODELS.find(m => m.id === provider)?.name}`
                 )}
               </button>
             </form>
@@ -180,7 +213,14 @@ export default function ScraperPage() {
             {/* Result */}
             {result && (
               <div className="mt-8">
-                <h2 className="text-xl font-bold mb-4">Result</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold">Result</h2>
+                  {result.provider && (
+                    <span className="text-sm text-zinc-400">
+                      via {AI_MODELS.find(m => m.id === result.provider)?.name}
+                    </span>
+                  )}
+                </div>
                 <div className={`rounded-xl border p-6 ${
                   result.success
                     ? 'border-zinc-700 bg-zinc-800/50'
@@ -214,11 +254,17 @@ export default function ScraperPage() {
                     onClick={() => {
                       setUrl(item.url);
                       setPrompt(item.prompt);
-                      setResult({ success: true, data: item.result });
+                      setProvider(item.provider);
+                      setResult({ success: true, data: item.result, provider: item.provider });
                     }}
                   >
-                    <p className="text-sm text-zinc-400 truncate">{item.url}</p>
-                    <p className="text-sm text-white mt-1 line-clamp-2">{item.prompt}</p>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-sm text-zinc-400 truncate flex-1">{item.url}</p>
+                      <span className="text-xs text-zinc-500 ml-2">
+                        {AI_MODELS.find(m => m.id === item.provider)?.name}
+                      </span>
+                    </div>
+                    <p className="text-sm text-white line-clamp-2">{item.prompt}</p>
                   </div>
                 ))}
               </div>

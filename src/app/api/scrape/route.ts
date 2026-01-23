@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/authOptions';
-import { scrapeWithAI } from '@/lib/scraper';
+import { scrapeWithAI, AIProvider } from '@/lib/scraper';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { url, prompt } = body;
+    const { url, prompt, provider = 'anthropic' } = body;
 
     // Validate inputs
     if (!url || typeof url !== 'string') {
@@ -33,6 +33,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate provider
+    if (provider !== 'anthropic' && provider !== 'openai') {
+      return NextResponse.json(
+        { error: 'Invalid provider. Use "anthropic" or "openai"' },
+        { status: 400 }
+      );
+    }
+
     // Validate URL format
     try {
       new URL(url);
@@ -43,23 +51,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get API key from environment
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    // Get API key based on provider
+    const apiKey = provider === 'openai'
+      ? process.env.OPENAI_API_KEY
+      : process.env.ANTHROPIC_API_KEY;
+
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'AI service not configured' },
+        { error: `${provider === 'openai' ? 'OpenAI' : 'Anthropic'} API key not configured` },
         { status: 500 }
       );
     }
 
     // Perform the scrape
-    const result = await scrapeWithAI(url, prompt, apiKey);
+    const result = await scrapeWithAI(url, prompt, {
+      provider: provider as AIProvider,
+      apiKey,
+    });
 
     if (result.success) {
       return NextResponse.json({
         success: true,
         data: result.data,
         url: result.url,
+        provider: result.provider,
       });
     } else {
       return NextResponse.json(

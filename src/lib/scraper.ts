@@ -1,5 +1,8 @@
 import * as cheerio from 'cheerio';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+
+export type AIProvider = 'anthropic' | 'openai';
 
 export interface ScrapeResult {
   success: boolean;
@@ -7,6 +10,7 @@ export interface ScrapeResult {
   error?: string;
   url: string;
   prompt: string;
+  provider?: AIProvider;
 }
 
 export interface ScrapedContent {
@@ -14,6 +18,11 @@ export interface ScrapedContent {
   text: string;
   links: { text: string; href: string }[];
   metadata: Record<string, string>;
+}
+
+export interface AIConfig {
+  provider: AIProvider;
+  apiKey: string;
 }
 
 /**
@@ -71,24 +80,15 @@ export async function fetchAndParse(url: string): Promise<ScrapedContent> {
   return { title, text, links, metadata };
 }
 
-/**
- * Uses Claude AI to extract information from webpage content based on a prompt
- */
-export async function extractWithAI(
-  content: ScrapedContent,
-  prompt: string,
-  apiKey: string
-): Promise<string> {
-  const anthropic = new Anthropic({ apiKey });
-
-  const systemPrompt = `You are an AI assistant that extracts specific information from webpage content.
+const SYSTEM_PROMPT = `You are an AI assistant that extracts specific information from webpage content.
 You will be given the text content of a webpage and a user's request for what information to extract.
 Analyze the content carefully and extract exactly what the user asks for.
 If the information is not found, say so clearly.
 Be concise and direct in your response.
 Format your response in a clean, readable way. Use JSON format when extracting structured data.`;
 
-  const userMessage = `
+function buildUserMessage(content: ScrapedContent, prompt: string): string {
+  return `
 ## Webpage Title
 ${content.title}
 
@@ -107,6 +107,17 @@ ${content.links.slice(0, 50).map(l => `- ${l.text}: ${l.href}`).join('\n')}
 ${prompt}
 
 Please extract the requested information from the webpage content above.`;
+}
+
+/**
+ * Uses Claude AI to extract information from webpage content based on a prompt
+ */
+async function extractWithAnthropic(
+  content: ScrapedContent,
+  prompt: string,
+  apiKey: string
+): Promise<string> {
+  const anthropic = new Anthropic({ apiKey });
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -114,14 +125,56 @@ Please extract the requested information from the webpage content above.`;
     messages: [
       {
         role: 'user',
-        content: userMessage,
+        content: buildUserMessage(content, prompt),
       },
     ],
-    system: systemPrompt,
+    system: SYSTEM_PROMPT,
   });
 
   const textBlock = response.content.find(block => block.type === 'text');
   return textBlock ? textBlock.text : 'No response generated';
+}
+
+/**
+ * Uses OpenAI GPT-4o mini to extract information from webpage content based on a prompt
+ */
+async function extractWithOpenAI(
+  content: ScrapedContent,
+  prompt: string,
+  apiKey: string
+): Promise<string> {
+  const openai = new OpenAI({ apiKey });
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    max_tokens: 4096,
+    messages: [
+      {
+        role: 'system',
+        content: SYSTEM_PROMPT,
+      },
+      {
+        role: 'user',
+        content: buildUserMessage(content, prompt),
+      },
+    ],
+  });
+
+  return response.choices[0]?.message?.content || 'No response generated';
+}
+
+/**
+ * Uses AI to extract information from webpage content based on a prompt
+ */
+export async function extractWithAI(
+  content: ScrapedContent,
+  prompt: string,
+  config: AIConfig
+): Promise<string> {
+  if (config.provider === 'openai') {
+    return extractWithOpenAI(content, prompt, config.apiKey);
+  }
+  return extractWithAnthropic(content, prompt, config.apiKey);
 }
 
 /**
@@ -130,7 +183,7 @@ Please extract the requested information from the webpage content above.`;
 export async function scrapeWithAI(
   url: string,
   prompt: string,
-  apiKey: string
+  config: AIConfig
 ): Promise<ScrapeResult> {
   try {
     // Validate URL
@@ -140,13 +193,14 @@ export async function scrapeWithAI(
     const content = await fetchAndParse(url);
 
     // Extract information using AI
-    const data = await extractWithAI(content, prompt, apiKey);
+    const data = await extractWithAI(content, prompt, config);
 
     return {
       success: true,
       data,
       url,
       prompt,
+      provider: config.provider,
     };
   } catch (error) {
     return {
@@ -154,6 +208,7 @@ export async function scrapeWithAI(
       error: error instanceof Error ? error.message : 'Unknown error occurred',
       url,
       prompt,
+      provider: config.provider,
     };
   }
 }
