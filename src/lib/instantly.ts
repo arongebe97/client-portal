@@ -156,7 +156,11 @@ export async function getCampaignAnalytics(campaignId?: string): Promise<Campaig
     }
 
     const data = await response.json();
-    return data || [];
+    // Response could be array directly, or wrapped in { data: [...] } or { items: [...] }
+    if (Array.isArray(data)) return data;
+    if (data?.data && Array.isArray(data.data)) return data.data;
+    if (data?.items && Array.isArray(data.items)) return data.items;
+    return [];
   } catch (error) {
     console.error("Error fetching campaign analytics:", error);
     return [];

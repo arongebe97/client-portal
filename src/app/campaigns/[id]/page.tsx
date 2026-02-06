@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import { redirect, notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import CrmLayout from "@/components/CrmLayout";
 import {
@@ -29,9 +29,10 @@ export default async function CampaignDetailPage({ params }: Props) {
     getInstantlyEmails({ campaign_id: id, email_type: "received", limit: 20 }),
   ]);
 
-  if (!campaign) notFound();
-
   const analytics = analyticsArr[0] || null;
+
+  // Use campaign name from analytics if direct fetch failed
+  const campaignName = campaign?.name || analytics?.campaign_name || "Campaign";
 
   return (
     <CrmLayout userEmail={session.user.email || ""} isAdmin={isAdmin}>
@@ -43,7 +44,7 @@ export default async function CampaignDetailPage({ params }: Props) {
           </Link>
           <div className="mt-2 flex items-center gap-3">
             {analytics && <StatusDot status={analytics.campaign_status} />}
-            <h1 className="text-3xl font-bold">{campaign.name}</h1>
+            <h1 className="text-3xl font-bold">{campaignName}</h1>
           </div>
           <p className="text-xs text-zinc-500 font-mono mt-1">{id}</p>
         </div>
