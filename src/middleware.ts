@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 export default withAuth(
     function middleware(req) {
         const token = req.nextauth.token;
-        const isAuth = !!token;
         const isAdminPage = req.nextUrl.pathname.startsWith("/admin");
 
         if (isAdminPage && token?.role !== "ADMIN") {
@@ -21,5 +20,5 @@ export default withAuth(
 );
 
 export const config = {
-    matcher: ["/", "/admin/:path*", "/campaigns/:path*"],
+    matcher: ["/", "/admin/:path*", "/campaigns/:path*", "/leads/:path*", "/inbox/:path*"],
 };

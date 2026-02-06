@@ -1,118 +1,140 @@
-import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import SignOutButton from "@/components/SignOutButton";
+import CrmLayout from "@/components/CrmLayout";
+import { getCampaignAnalytics } from "@/lib/instantly";
 
-async function getData(userId: string, isAdmin: boolean) {
-  let campaignIds: string[] = [];
-
-  if (isAdmin) {
-    const allAssignments = await prisma.campaignAccess.findMany({
-      select: { instantly_campaign_id: true }
-    });
-    campaignIds = allAssignments.map(a => a.instantly_campaign_id);
-  } else {
-    const assignments = await prisma.campaignAccess.findMany({
-      where: { client_id: userId },
-      select: { instantly_campaign_id: true }
-    });
-    campaignIds = assignments.map(a => a.instantly_campaign_id);
-  }
-
-  if (campaignIds.length === 0) {
-    return { stats: { sent: 0, openRate: 0, replyRate: 0, totalCampaigns: 0 } };
-  }
-
-  const queryOptions: any = isAdmin ? {} : { where: { client_id: userId } };
-  const stats = await prisma.campaign_Stats.aggregate({
-    ...queryOptions,
-    _sum: {
-      emails_sent: true,
-      opens: true,
-      replies: true,
-    }
-  });
-
-  const aggregate = stats._sum || { emails_sent: 0, opens: 0, replies: 0 };
-  const openRate = aggregate.emails_sent ? (aggregate.opens! / aggregate.emails_sent) * 100 : 0;
-  const replyRate = aggregate.emails_sent ? (aggregate.replies! / aggregate.emails_sent) * 100 : 0;
-
-  return {
-    stats: {
-      sent: aggregate.emails_sent || 0,
-      openRate: openRate,
-      replyRate: replyRate,
-      totalCampaigns: new Set(campaignIds).size
-    }
-  };
-}
-
-export default async function ClientDashboard() {
+export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
-
   if (!session) redirect("/login");
+
   const isAdmin = session.user.role === "ADMIN";
 
-  const { stats } = await getData(session.user.id, isAdmin);
+  // Fetch real analytics from Instantly
+  const analytics = await getCampaignAnalytics();
+
+  // Aggregate stats across all campaigns
+  const totals = analytics.reduce(
+    (acc, c) => ({
+      emailsSent: acc.emailsSent + (c.emails_sent_count || 0),
+      opens: acc.opens + (c.open_count_unique || 0),
+      replies: acc.replies + (c.reply_count_unique || 0),
+      leads: acc.leads + (c.leads_count || 0),
+      bounces: acc.bounces + (c.bounced_count || 0),
+      opportunities: acc.opportunities + (c.total_opportunities || 0),
+    }),
+    { emailsSent: 0, opens: 0, replies: 0, leads: 0, bounces: 0, opportunities: 0 }
+  );
+
+  const openRate = totals.emailsSent > 0 ? (totals.opens / totals.emailsSent) * 100 : 0;
+  const replyRate = totals.emailsSent > 0 ? (totals.replies / totals.emailsSent) * 100 : 0;
+
+  // Top campaigns by replies
+  const topCampaigns = [...analytics]
+    .sort((a, b) => (b.reply_count_unique || 0) - (a.reply_count_unique || 0))
+    .slice(0, 5);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-50">
-      <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-orange-500"></div>
-            <span className="font-bold">Client Portal</span>
-          </div>
-          <div className="flex items-center gap-6">
-            {session.user.role === "ADMIN" && (
-              <Link href="/admin" className="text-sm font-medium text-blue-400 hover:text-blue-300">
-                Admin Area
-              </Link>
-            )}
-            <SignOutButton />
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+    <CrmLayout userEmail={session.user.email || ""} isAdmin={isAdmin}>
+      <div className="p-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold">Overview</h1>
-          <p className="text-zinc-400 mt-2">Welcome back, {session.user.email}</p>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-zinc-400 mt-1">
+            Welcome back, {session.user.email}
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Stat Card 1 */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-            <dt className="text-sm font-medium text-zinc-400">Total Emails Sent</dt>
-            <dd className="mt-2 text-3xl font-bold text-white tracking-tight">{stats.sent.toLocaleString()}</dd>
-          </div>
-          {/* Stat Card 2 */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-            <dt className="text-sm font-medium text-zinc-400">Open Rate</dt>
-            <dd className="mt-2 text-3xl font-bold text-white tracking-tight">{stats.openRate.toFixed(1)}%</dd>
-          </div>
-          {/* Stat Card 3 */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-            <dt className="text-sm font-medium text-zinc-400">Reply Rate</dt>
-            <dd className="mt-2 text-3xl font-bold text-white tracking-tight">{stats.replyRate.toFixed(1)}%</dd>
-          </div>
-          {/* Stat Card 4 */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-            <dt className="text-sm font-medium text-zinc-400">Active Campaigns</dt>
-            <dd className="mt-2 text-3xl font-bold text-white tracking-tight">{stats.totalCampaigns}</dd>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Emails Sent" value={totals.emailsSent.toLocaleString()} />
+          <StatCard label="Open Rate" value={`${openRate.toFixed(1)}%`} sub={`${totals.opens.toLocaleString()} unique opens`} />
+          <StatCard label="Reply Rate" value={`${replyRate.toFixed(1)}%`} sub={`${totals.replies.toLocaleString()} unique replies`} />
+          <StatCard label="Total Leads" value={totals.leads.toLocaleString()} />
+          <StatCard label="Active Campaigns" value={String(analytics.filter(c => c.campaign_status === 1).length)} />
+          <StatCard label="Bounced" value={totals.bounces.toLocaleString()} />
+          <StatCard label="Opportunities" value={totals.opportunities.toLocaleString()} />
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 flex items-center justify-center">
+            <Link href="/inbox" className="text-orange-400 hover:text-orange-300 text-sm font-medium transition-colors">
+              View Inbox &rarr;
+            </Link>
           </div>
         </div>
 
-        <div className="mt-12">
-          <h2 className="text-xl font-bold mb-6">Assigned Campaigns</h2>
-          {/* We will implement the list here in next step, placeholder for now */}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center text-zinc-500">
-            <Link href="/campaigns" className="text-blue-400 hover:underline">View All Campaigns →</Link>
+        {/* Top Campaigns */}
+        <div className="mt-10">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold">Top Campaigns by Replies</h2>
+            <Link href="/campaigns" className="text-sm text-orange-400 hover:text-orange-300 transition-colors">
+              View all &rarr;
+            </Link>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 text-zinc-400">
+                  <th className="px-6 py-3 font-medium">Campaign</th>
+                  <th className="px-6 py-3 font-medium text-right">Sent</th>
+                  <th className="px-6 py-3 font-medium text-right">Opens</th>
+                  <th className="px-6 py-3 font-medium text-right">Replies</th>
+                  <th className="px-6 py-3 font-medium text-right">Leads</th>
+                  <th className="px-6 py-3 font-medium text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {topCampaigns.map((c) => (
+                  <tr key={c.campaign_id} className="hover:bg-zinc-900/80 transition-colors">
+                    <td className="px-6 py-4">
+                      <Link href={`/campaigns/${c.campaign_id}`} className="font-medium text-zinc-200 hover:text-white transition-colors">
+                        {c.campaign_name}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-4 text-right text-zinc-400">{(c.emails_sent_count || 0).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right text-zinc-400">{(c.open_count_unique || 0).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right text-zinc-400">{(c.reply_count_unique || 0).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right text-zinc-400">{(c.leads_count || 0).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right">
+                      <CampaignStatusBadge status={c.campaign_status} />
+                    </td>
+                  </tr>
+                ))}
+                {topCampaigns.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-zinc-500">
+                      No campaign data available yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-      </main>
+      </div>
+    </CrmLayout>
+  );
+}
+
+function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+      <dt className="text-sm font-medium text-zinc-400">{label}</dt>
+      <dd className="mt-2 text-3xl font-bold text-white tracking-tight">{value}</dd>
+      {sub && <p className="mt-1 text-xs text-zinc-500">{sub}</p>}
     </div>
+  );
+}
+
+function CampaignStatusBadge({ status }: { status: number }) {
+  const config: Record<number, { label: string; color: string }> = {
+    0: { label: "Draft", color: "text-zinc-400 bg-zinc-400/10 ring-zinc-400/20" },
+    1: { label: "Active", color: "text-green-400 bg-green-400/10 ring-green-400/20" },
+    2: { label: "Paused", color: "text-yellow-400 bg-yellow-400/10 ring-yellow-400/20" },
+    3: { label: "Completed", color: "text-blue-400 bg-blue-400/10 ring-blue-400/20" },
+  };
+  const c = config[status] || config[0];
+  return (
+    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${c.color}`}>
+      {c.label}
+    </span>
   );
 }
